@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
       - name: kafka-streams-shipments
-        image: quay.io/rhte2023edgelab/kafka-streams-shipments:1.0.0-SNAPSHOT
+        image: quay.io/rhte2023edgelab/kafka-streams-shipments:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8080
