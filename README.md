@@ -80,6 +80,93 @@ podman push quay.io/rhte2023edgelab/kafka-streams-shipments:$APP_VERSION
 podman push quay.io/rhte2023edgelab/kafka-streams-shipments:latest
 ```
 
+## Deploy in Kubernetes
+
+Create a project named "headquarter".
+
+Install the **Red Hat Integration - AMQ Streams** operator
+
+Create a Kafka resource.
+
+```yaml
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: headquarter
+spec:
+  kafka:
+    config:
+      offsets.topic.replication.factor: 3
+      transaction.state.log.replication.factor: 3
+      transaction.state.log.min.isr: 2
+      default.replication.factor: 3
+      min.insync.replicas: 2
+      inter.broker.protocol.version: '3.2'
+    storage:
+      type: ephemeral
+    listeners:
+      - authentication:
+          type: scram-sha-512
+        name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - authentication:
+          type: scram-sha-512
+        name: tls
+        port: 9093
+        type: route
+        tls: true
+    version: 3.2.3
+    replicas: 3
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}
+  zookeeper:
+    storage:
+      type: ephemeral
+    replicas: 3
+```
+
+Deploy all Kubernetes manifests.
+
+```sh
+kubectl apply -f k8s
+```
+
+Create **kcat-hq.conf** as follow:
+
+```ini
+# Required connection configs for Kafka producer, consumer, and admin
+bootstrap.servers=headquarter-kafka-tls-bootstrap-headquarter.apps.appdev.itix.xyz:443
+ssl.ca.location=/home/nmasse/tmp/headquarter.pem
+security.protocol=SASL_SSL
+sasl.mechanisms=SCRAM-SHA-512
+sasl.username=kafka-streams-shipments
+sasl.password=s3cr3t
+
+# Best practice for higher availability in librdkafka clients prior to 1.7
+session.timeout.ms=45000
+```
+
+Launch the following commands in separate terminals.
+
+```sh
+kcat -b headquarter-kafka-tls-bootstrap-headquarter.apps.appdev.itix.xyz:443 -C -F ~/tmp/kcat-hq.conf -t headquarter-shipment-records -f "%k => %s\n"
+kcat -b headquarter-kafka-tls-bootstrap-headquarter.apps.appdev.itix.xyz:443 -C -F ~/tmp/kcat-hq.conf -t headquarter-location-records -f "%k => %s\n"
+```
+
+In a third terminal, run:
+
+```sh
+kcat -b headquarter-kafka-tls-bootstrap-headquarter.apps.appdev.itix.xyz:443 -P -F ~/tmp/kcat-hq.conf -t headquarter-location-records -k 11:22:33:44 <<EOF
+{"parcelNumber":"11:22:33:44","location":"DUB","direction":"out","timestamp":$(date +%s -d "now")}
+{"parcelNumber":"11:22:33:44","location":"PAR","direction":"in","timestamp":$(date +%s -d "1 second")}
+{"parcelNumber":"11:22:33:44","location":"PAR","direction":"out","timestamp":$(date +%s -d "2 second")}
+{"parcelNumber":"11:22:33:44","location":"ATH","direction":"in","timestamp":$(date +%s -d "3 second")}
+EOF
+```
+
 ## Development environment
 
 Start the Kafka broker and create two topics.
