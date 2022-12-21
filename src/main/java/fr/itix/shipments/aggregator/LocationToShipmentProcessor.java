@@ -4,16 +4,23 @@ import org.apache.kafka.streams.processor.api.Processor;
 import org.apache.kafka.streams.processor.api.ProcessorContext;
 import org.apache.kafka.streams.processor.api.Record;
 import org.apache.kafka.streams.state.KeyValueStore;
+import org.jboss.logging.Logger;
 
 import fr.itix.shipments.model.LocationRecord;
 import fr.itix.shipments.model.ShipmentRecord;
 
 public class LocationToShipmentProcessor implements Processor<String, LocationRecord, String, ShipmentRecord> {
+    private static final Logger LOG = Logger.getLogger(TopologyProducer.class);
     private KeyValueStore<String, ShipmentRecord> kvStore;
     private ProcessorContext<String, ShipmentRecord> context;
 
     @Override
     public void process(Record<String, LocationRecord> record) {
+        if (record.key() == null) {
+            LOG.info("Discarding event with null key");
+            return;
+        }
+
         // Retrieve shipment from local store
         ShipmentRecord shipment = kvStore.get(record.key());
         if (shipment == null) {
@@ -38,6 +45,6 @@ public class LocationToShipmentProcessor implements Processor<String, LocationRe
     @Override
     public void init(final ProcessorContext<String, ShipmentRecord> context) {
         this.context = context;
-        this.kvStore = (KeyValueStore<String, ShipmentRecord>) context.getStateStore(TopologyProducer.LOCATION_RECORDS_STORE);
+        this.kvStore = (KeyValueStore<String, ShipmentRecord>) context.getStateStore(TopologyProducer.KSTREAM_RECORDS_STORE);
     }
 }

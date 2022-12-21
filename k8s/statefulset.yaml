@@ -1,0 +1,82 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: kafka-streams-shipments
+spec:
+  replicas: 1
+  serviceName: kafka-streams-shipments
+  selector:
+    matchLabels:
+      name: kafka-streams-shipments
+  template:
+    metadata:
+      labels:
+        name: kafka-streams-shipments
+    spec:
+      containers:
+      - name: kafka-streams-shipments
+        image: quay.io/rhte2023edgelab/kafka-streams-shipments:1.0.0-SNAPSHOT
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+        env:
+        - name: KAFKA_BOOTSTRAP_SERVERS
+          value: headquarter-kafka-bootstrap:9092
+        - name: LOCATION_RECORDS_TOPIC
+          value: headquarter-location-records
+        - name: SHIPMENT_RECORDS_TOPIC
+          value: headquarter-shipment-records
+        - name: QUARKUS_KAFKA_STREAMS_TOPICS
+          value: headquarter-location-records,headquarter-shipment-records
+        - name: JAVA_OPTS_APPEND
+          value: -Dkafka-streams.state.dir=/var/lib/kafka-streams/data
+        - name: QUARKUS_KAFKA_STREAMS_SECURITY_PROTOCOL
+          value: SASL_PLAINTEXT
+        - name: MP_MESSAGING_CONNECTOR_SMALLRYE_KAFKA_SECURITY_PROTOCOL
+          value: SASL_PLAINTEXT
+        - name: QUARKUS_KAFKA_STREAMS_SASL_MECHANISM
+          value: SCRAM-SHA-512
+        - name: MP_MESSAGING_CONNECTOR_SMALLRYE_KAFKA_SASL_MECHANISM
+          value: SCRAM-SHA-512
+        - name: QUARKUS_KAFKA_STREAMS_SASL_JAAS_CONFIG
+          valueFrom:
+            secretKeyRef:
+              name: kafka-streams-shipments
+              key: sasl.jaas.config
+        - name: MP_MESSAGING_CONNECTOR_SMALLRYE_KAFKA_SASL_JAAS_CONFIG
+          valueFrom:
+            secretKeyRef:
+              name: kafka-streams-shipments
+              key: sasl.jaas.config
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /q/health/ready
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 20
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /q/health/live
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          successThreshold: 1
+          timeoutSeconds: 20
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/kafka-streams
+      terminationGracePeriodSeconds: 30
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
